@@ -1,0 +1,11 @@
+import { beforeEach,describe,expect,it } from 'vitest'; import { makeFixtures } from '../lib/fixtures'; import { reset,execute,getIncident } from '../lib/store'; import { DiagnosisProposal } from '../lib/types';
+const proposal=(id:string,rec:any):DiagnosisProposal=>{const i=getIncident(id)!;const t=Date.now();return {id:`p-${id}`,incidentId:id,evidenceVersion:i.evidenceVersion,createdAt:new Date(t).toISOString(),expiresAt:new Date(t+300000).toISOString(),diagnosisSummary:'demo',evidenceRefs:Object.keys(i.evidence),missingEvidence:[],recommendation:rec,rationale:'demo',safetyChecks:[],expectedOutcome:'demo',limits:[]}};
+beforeEach(()=>reset());
+describe('merchant safety gates',()=>{
+ it('A approves once then verifies separately',async()=>{const r=execute({proposal:proposal('INC-101','SIMULATE_RESTART'),decision:'approve'});expect(r.kind).toBe('executing');expect(getIncident('INC-101')?.status).toBe('VERIFYING');await new Promise(r=>setTimeout(r,2100));expect(getIncident('INC-101')?.status).toBe('RECOVERED_SIMULATION')});
+ it('C refuses an active transaction server-side',()=>{expect(()=>execute({proposal:proposal('INC-103','SIMULATE_RESTART'),decision:'approve'})).toThrow()});
+ it('duplicate approval returns the stored result',()=>{const p=proposal('INC-101','SIMULATE_RESTART');const a=execute({proposal:p,decision:'approve'});const b=execute({proposal:p,decision:'approve'});expect(b.kind).toBe('idempotent');expect(getIncident('INC-101')?.actionCount).toBe(1);expect(a.result?.id).toBe((b.result as any)?.id)});
+ it('reject records no action',()=>{const r=execute({proposal:proposal('INC-101','SIMULATE_RESTART'),decision:'reject'});expect(r.kind).toBe('rejected');expect(getIncident('INC-101')?.actionCount).toBe(0)});
+ it('printer creates a ticket state, not repair',()=>{const r=execute({proposal:proposal('INC-102','CREATE_SANDBOX_TICKET'),decision:'approve'});expect(r.kind).toBe('ticket');expect(getIncident('INC-102')?.status).toBe('TICKET_CREATED')});
+ it('changed evidence blocks approval',()=>{const p=proposal('INC-101','SIMULATE_RESTART');getIncident('INC-101')!.evidenceVersion++;expect(()=>execute({proposal:p,decision:'approve'})).toThrow(/Evidence changed/)});
+});

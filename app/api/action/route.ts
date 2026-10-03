@@ -1,0 +1,1 @@
+import { execute } from '@/lib/store'; export async function POST(req:Request){try{return Response.json(execute(await req.json()));}catch(e){return Response.json({error:e instanceof Error?e.message:'Action refused'},{status:409});}}
